@@ -9,7 +9,7 @@ Hits are then filtered based on the presence of both 5’ and 3’ flanking sequ
 other genomes represented syntenic/orthologous elements. Both the total number and number of potentially orthologous matches are recorded.
 
 
-    USAGE (v3.6)
+    USAGE (v3.7)
     This script will assess lineage for various repeats, from Repeat Masker output(s) - and output a summary table.
     Orthology will be approximated by presence of 50% of the flankings of the element in the best hit.	
     Note that outputs will be located in the same DIRECTORY of the <dir_with_all_files> (so you need writing access)

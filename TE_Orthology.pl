@@ -26,7 +26,7 @@ use Bio::DB::Fasta;
 use Bio::SearchIO; 
 use Bio::SeqIO;
 
-my $version = "3.6";
+my $version = "3.7";
 
 my $changelog = "
 #	- v1.0 = May 2014
@@ -78,6 +78,8 @@ my $changelog = "
 #		Tiny bugs fixed
 #	- v3.6 = 14 Sep 2015
 #		-list option was not set up properly (not included in the filtering while splitting RMout files)
+#	- v3.7 = 23 Feb 2017
+#       parse blast with ls => error from the use of * by a user => use find command instead
 
 # TO DO
 # Better and faster if -append would detect directly the .out that have been processed or not...
@@ -201,9 +203,9 @@ GetOptions ('dir=s' => \$dir, 'tree=s' => \$tree, 'blast=s' => \$blastloc, 'e=s'
 # CHECKING STEPS
 #
 #check step to see if mandatory argument is provided + if help/changelog
-die "\n version $version\n\n" if ((! $dir) && (! $help)  && (! $chlog) && ($v));
-die $usage if ((! $dir) || ($help));
+die "\n version $version\n\n" if ((! $dir) && (! $help) && (! $chlog) && ($v));
 die $changelog if ($chlog);
+die $usage if ((! $dir) || ($help));
 
 print STDERR "\n --- Script TE_Orthology started (v$version)\n" if ($v);
 
@@ -405,11 +407,11 @@ print STDERR "     => Starting $cpus thread(s) to process a total of $RMout_list
 
 #start threads
 for(my $i = 1; $i < $cpus; $i++){
-    threads->create({ 'context' => 'scalar' }, \&bring_it_on, \@RMout_list, \$RMout_list_nb, \@RMout_done, \%frgs_all, \%frgs_nr, \@posi_list, \@posi_done, \$flank, \$min_frg, \$min_len, \$filter, \$f_regexp, \@flist, \$dir, \$outpath, $genlen, \$append, \$presplit, \$v);
+    threads->create({ 'context' => 'scalar' }, \&bring_it_on, \@RMout_list, \$RMout_list_nb, \@RMout_done, \%frgs_all, \%frgs_nr, \@posi_list, \@posi_done, \$flank, \$min_frg, \$min_len, \$filter, \$f_regexp, \@flist, \$dir, \$outpath, $genlen, \$append, \$presplit, \$blastloc, \$v);
 }
 
 #run threads
-bring_it_on(\@RMout_list, \$RMout_list_nb, \@RMout_done, \%frgs_all, \%frgs_nr, \@posi_list, \@posi_done, \$flank, \$min_frg, \$min_len, \$filter, \$f_regexp, \@flist, \$dir, \$outpath, $genlen, \$append, \$presplit, \$v);
+bring_it_on(\@RMout_list, \$RMout_list_nb, \@RMout_done, \%frgs_all, \%frgs_nr, \@posi_list, \@posi_done, \$flank, \$min_frg, \$min_len, \$filter, \$f_regexp, \@flist, \$dir, \$outpath, $genlen, \$append, \$presplit, \$blastloc, \$v);
 
 #clean threads
 print STDERR "\n --- Cleaning the $cpus threads\n" if ($v);
@@ -460,7 +462,7 @@ exit;
 # bring_it_on(\@RMout_list, \$RMout_list_nb, \@RMout_done, \%frgs_all, \%frgs_nr, \@posi_list, \@posi_done, \$flank, \$min_frg, \$min_len, \$filter, \$f_regexp, \@flist, \$dir, \$outpath, $genlen, \$append, \$presplit, \$v);
 #----------------------------------------------------------------------------
 sub bring_it_on {
-    my ($RMout_list,$RMout_list_nb,$RMout_done,$frgs_all,$frgs_nr,$posi_list,$posi_done,$flank,$min_frg,$min_len,$filter,$f_regexp,$flist,$dir,$outpath,$genlen,$append,$presplit,$v) = @_; 
+    my ($RMout_list,$RMout_list_nb,$RMout_done,$frgs_all,$frgs_nr,$posi_list,$posi_done,$flank,$min_frg,$min_len,$filter,$f_regexp,$flist,$dir,$outpath,$genlen,$append,$presplit,$blastloc,$v) = @_; 
 	
 	my @flags = (0,0);
 #	RMFILE: while(defined(my $RMout = shift @$RMout_list) || (! $$finished)){
@@ -1202,7 +1204,8 @@ sub parse_blast {
 	$flank = $flank/100*50; #if flank of 100 nt, 50 nt are required to decide it is orthologous
 	my %ortho = ();
 	my %tothit = ();
-	my @blastout = `ls $outpath/DATA/*.extract/*.blast.*.out`;
+#	my @blastout = `ls $outpath/DATA/*.extract/*.blast.*.out`;
+	my @blastout = `find $outpath/DATA/*.extract/ -name *.blast.*.out`; #Check to see if this fix error sh: /bin/ls: Argument list too long
 	foreach my $Bout (@blastout) {
 		chomp $Bout;
 # 		print STDERR "     - parsing $Bout\n" if ($v);
