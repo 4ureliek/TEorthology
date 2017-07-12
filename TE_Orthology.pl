@@ -26,7 +26,7 @@ use Bio::DB::Fasta;
 use Bio::SearchIO; 
 use Bio::SeqIO;
 
-my $version = "3.7";
+my $version = "3.8";
 
 my $changelog = "
 #	- v1.0 = May 2014
@@ -42,13 +42,15 @@ my $changelog = "
 #		Corrected cleaning previous outputs
 #		Return in thread loop that shouldn't be there -> changed as a next FILE
 #	- v2.2 = 29 Jul 2014
-#		extract_one_seq was modified to avoid regexp against whole db header list, it was a long useless step + some variables were not use, remains from a cc of other script
+#		extract_one_seq was modified to avoid regexp against whole db header list,
+#          it was a long useless step + some variables were not use, remains from a cc of other script
 #		missing \"return\" at the end of blast sub
 #		Bug fixed: var se remained in extract_sequences (semaphore variable)
 #		mv empty output folders instead of rm so I can see which ones since STDERR doesn't print everything for some reason
 #		\$v in thread [still trying to find solutions for stuff to print]
 #	- v2.3 = 06 Aug 2014
-#		script works and run but somehow only one thread was running... Add defined in the loop to get tasks + print before the return of the loop just in case
+#		script works and run but somehow only one thread was running... 
+#       Add defined in the loop to get tasks + print before the return of the loop just in case
 #		mv empty output folders was done to wrong folder
 #		added a DATA folder to avoid having too many folders in the output folder (easier to find final output)
 #	- v2.4 = 12 Aug 2014
@@ -80,71 +82,95 @@ my $changelog = "
 #		-list option was not set up properly (not included in the filtering while splitting RMout files)
 #	- v3.7 = 23 Feb 2017
 #       parse blast with ls => error from the use of * by a user => use find command instead
+#	- v3.8 = 12 Jul 2017
+#       fix \"Use of uninitialized value \$f_name in lc at TE_Orthology_P_v3+.pl line 745.\"
+#       fix blast subroutine (was \$ when \$\$ neeeded)
+#       and split on the file name for the blast outputs wouldn't work well if more than one . in the genome name
 
 # TO DO
 # Better and faster if -append would detect directly the .out that have been processed or not...
+# Rewrite cleaner code
+# Fix the min_frg and min_len filters
+# Write documentation
 \n";
 
 my $usage = "\nUsage [v$version]: 
 	perl <scriptname.pl> -dir <dir_with_all_files> [-tree <tree>] [-presplit] [-blast <path_to_ncbi-blast>] [-e <evalue>] [-filter <type,name>] [-contain] [-min_frg <X>] [-min_len <X>] [-flank <X>] [-TEs <TEclass>] [-out] [-append <X>] [-ponly] [-cpus <X>] [-v]
 	
-	This script will assess lineage for various repeats, from Repeat Masker output(s) - and output a summary table.
-	Orthology will be approximated by presence of 50% of the flankings of the element in the best hit.	
-	Note that outputs will be located in the same DIRECTORY of the <dir_with_all_files> (so you need writing access)
+	This script will assess lineage for various repeats, 
+	from Repeat Masker output(s) - and output a summary table.
+	Orthology will be approximated by presence of 50% of the 
+	flankings of the element in the best hit.	
+	Note that outputs will be located in the same DIRECTORY of 
+	the <dir_with_all_files> (so you need writing access)
 	
     MANDATORY ARGUMENT:	
     -dir (STRING)
         => directory that should contain:
            - at least 1 repeat masker output [there can be several]
            - Corresponding genomes (exact same ones that are masked) 
-               /!\\ Same name is required before extensions = .out and .fa; note that .out.XXXX is OK if you need more info in the file name
-               NOTE: sym links will work (ln -s path/file new_name) so no need to actually copy the genome files
+               /!\\ Same name is required before extensions = .out and .fa; 
+               note that .out.XXXX is OK if you need more info in the file name
+               NOTE: sym links will work (ln -s path/file new_name) so no need 
+               to actually copy the genome files
         For ex. minimal list of files in this directory = species1.out, species1.fa
         Outputs will be located in this folder too.
 	  
     OPTIONAL ARGUMENTS (flagged by brackets [...] around each of them)
      -tree (TSTRING)
         This can be a file .dng OR directly the relationships on command line using \"\"
-        To order species in the output, based on phylogenetic relationships. Follow Newick format = (A,B,(C,D));
+        To order species in the output, based on phylogenetic relationships. 
+        Follow Newick format = (A,B,(C,D));
         ex: -tree \"(((hg19,panTro4),rheMac3),(canFam3,felCat5));\"
-            whill lead to order in output being: hg19,panTro4,rheMac3,canFam3,felCat5 + names with parenthesis will be printed on line above
+            whill lead to order in output being: hg19,panTro4,rheMac3,canFam3,felCat5 
+            + names with parenthesis will be printed on line above
             /!\\ IMPORTANT: 
                - names have to exactly match genome file name, anything before .fa
                - parenthesis and ; at the end are required
     -presplit (BOOL)
     	if RMoutput files have been split already => do not do it again
-    	Note that filtering from -filter is done at that step; unless it was -filter name,XX do not use -presplit if -filter changed
+    	Note that filtering from -filter is done at that step; 
+    	unless it was -filter name,XX do not use -presplit if -filter changed
     -blast (STRING)
         path to blast bin. 
         Default = /home/software/ncbi-blast-2.2.28+/bin
     -e <evalue>
         set minimum evalue for blast search. 
         Default = 10e-50; same species blast, evalue is set to 10e-120
-        Only the best hit is printed in the blast output, but lowering evalue will increase the speed.
+        Only the best hit is printed in the blast output, 
+        but lowering evalue will increase the speed.
         However, for distant species such as 60 My, this should not be decreased to much.
-        The best way to set this evalue is to manually check what evalue you would expect for a blast of non coding regions between species of interest.
+        The best way to set this evalue is to manually check what evalue you would 
+        expect for a blast of non coding regions between species of interest.
     -filter <type,name>
         run the script on only a subset of repeats. Not case sensitive.
-        This is advised instead of grepping the Repeat Masker output, because elements will be skipped when nested (e.g. flankings are repeated as well).
+        This is advised instead of grepping the Repeat Masker output, because elements 
+        will be skipped when nested (e.g. flankings are repeated as well).
         The type can be: name, class or family and it will be EXACT MATCH unless -contain is chosen as well
         ex: name,nhAT1_ML => only fragments corresponding to the repeat named exactly nhAT1_ML will be looked at
             class,DNA => all repeats with class named exactly DNA (as in ...#DNA/hAT or ...#DNA/Tc1)
             family,hAT => all repeats with family named exactly hAT (so NOT ...#DNA/hAT-Charlie for example)
         Importantly, unless you use -filter name,XX -presplit SHOULD NOT BE USED (can't filter on class or family)
     -contain (BOOL)
-        to check if the \"name\" determined with -filter is included in the value in Repeat Masker output, instead of exact match
+        to check if the \"name\" determined with -filter is included 
+        in the value in Repeat Masker output, instead of exact match
         ex: name,HERVK => all fragments containing HERVK in their name
             family,hAT => all repeats with family containing hAT (...#DNA/hAT, ...#DNA/hAT-Charlie, etc)
         No effect if -list is used and not -filter
     -list <file>
          to filter on a list of TEs
-         file = path of a file with a list of repeat names, one per line (if full names are given, only what is before # or any space will be considered)
+         file = path of a file with a list of repeat names, one per line 
+         (if full names are given, only what is before # or any space will be considered)
     -min_frg (INT)
-        filter for a minimum number of fragments (potentially useful if -filter class is chosen and library is not really clean)
-        note that this filtering is done before reconstruction of interrupted repeats (X is really the number of fragments and not of elements)
+        [NEEDS DEBUGGING for the parallelization - DO NOT USE]
+        filter for a minimum number of fragments (potentially useful if -filter class 
+        is chosen and library is not really clean). Note that this filtering is done 
+        before reconstruction of interrupted repeats (X is really the number of fragments and not of elements)
         ex: -min_frg 3   
     -min_len (INT)
-        filter for a minimum length of the fragment (in nt) to avoid considering very small pieces in orthology assessment
+        [NEEDS DEBUGGING for the parallelization - DO NOT USE]
+        filter for a minimum length of the fragment (in nt) to avoid considering 
+        very small pieces in orthology assessment
         ex: -min_len 80
     -flank (INT)
         To change the length of flankings extracted with the copy (fragment) of the element. 
@@ -155,7 +181,8 @@ my $usage = "\nUsage [v$version]:
         with TE information as follow, 3 first columns mandatory: 
         Rname \\t Rclass \\t Rfam \\t Rclass/Rfam \\t etc (only first 3 columns will be used)
         an easy way to get it is to run my other script parseRM.pl.
-        -> copy the first columns of the output all-repeats.tab, modify them accordingly and then copy this in a text file
+        -> copy the first columns of the output all-repeats.tab, 
+        modify them accordingly and then copy this in a text file
     -out (STRING)
         To rename the <out> part of the output directory [Default = orthology]
         Output = <where_project_is>/<out>.<project>
@@ -515,7 +542,7 @@ sub bring_it_on {
 		}
 	
 		#blast now
-		blast($dir,$faloc,$blastloc,$evalue,$append,$v);	
+		blast($$dir,$faloc,$$blastloc,$evalue,$$append,$v);	
 		
 		#done for this RMoutput file
 		print STDERR "     ...DONE: $RMout (thr ".threads->tid().") [$$RMout_list_nb files left]\n\n" if ($$v);		
@@ -687,7 +714,8 @@ sub split_RM_files {
 	my @list = ();
 
 	#get filter if relevant
-	my ($f_type,$f_name) = split(",",$filter) unless ($filter eq "na");
+	my ($f_type,$f_name) = ("na","na");
+	($f_type,$f_name) = split(",",$filter) unless ($filter eq "na");
 	my %check = ();	
 	#check that corresponding genome exists, if not exclude from list
 	my $RMs = check_for_genome($RMouts,$dir,$v);
@@ -971,7 +999,7 @@ sub extract_sequences {
 	my $posiname = filename($posi);
 	my ($RMout,$Rname) = ($1,$2) if $posiname =~ /^(.+?\.out.*?)##(.+?)\.tab$/;
 	#deal with output fasta file with extracted sequences - 1 file per repeat for each RMout/genome
-	my $extracted = $faloc."/".$sp.".".$Rname.".extract.fa";
+	my $extracted = $faloc."/".$sp."__".$Rname.".extract.fa";
 	
 	#Now deal with extraction
 	my $check = ();
@@ -1146,7 +1174,7 @@ sub blast {
 	print STDERR "       ..in progress: blastn extracted sequences located in $faloc (thr ".threads->tid().")\n" if ($$v);
 
 	my @fafiles = `ls $faloc/*.fa` or confess "\n      ERROR (sub blast): can't list files .fa in $faloc $!\n\n";
-	my @genomes = `ls $$dir/*.fa` or confess "\n      ERROR (sub blast): can't list files .fa in $dir $!\n\n";
+	my @genomes = `ls $dir/*.fa` or confess "\n      ERROR (sub blast): can't list files .fa in $dir $!\n\n";
 	my $skipped = 0;
 	my $newe = $evalue;
 	foreach my $g (@genomes) {
@@ -1161,7 +1189,7 @@ sub blast {
 		
 		#now blast unless append and output exists
 		my $out = "$fa.blast.$gname.out";
-		if (($$append eq "yes") && (-e $out)) {
+		if (($append eq "yes") && (-e $out)) {
 			print STDERR "          - skipped (because -append and output exists): blast $fa against $g\n" if ($v);		
 		} else {
 			print STDERR "          - $fa against $g (thr ".threads->tid().")\n" if ($v);
@@ -1215,8 +1243,7 @@ sub parse_blast {
 		#print STDERR "     - Getting sequence descriptions by opening fa files from $loc\n" if ($v);
 		my $Qdesc = get_Qdesc_from_extracted_seqs($loc);
 		#Now parse
-		my ($Q_sp,$T_sp) = ($1,$2) if ($Bfile =~ /^(.+?)\..*\.blast\.(.+)\.out$/);
-		
+		my ($Q_sp,$T_sp) = ($1,$2) if ($Bfile =~ /^(.+?)__.*\.extract.fa.blast\.(.+)\.out$/);
 		#Structure of the tabular file:
 		#qseqid qstart qend qlen qcovs qcovhsp sseqid sstart send sstrand slen evalue bitscore score length pident nident mismatch ppos positive gapopen gaps
 # 
@@ -1306,7 +1333,7 @@ sub get_ortho_output {
 	foreach my $Rfullname (sort keys %{ $ortho }) {
 		foreach my $query (sort keys %{ $ortho->{$Rfullname} }) {
 			my $Rname = $1 if ($Rfullname =~ /^(.+?)#/);
-			my $key = `ls $dir/*split/$query.out*##$Rname.tab`;
+			my $key = `ls $dir/*split/$query*##$Rname.tab`;
 			chomp $key;
 			$key = filename($key);
 			print $fh "$Rfullname\t$query\t".$frgs_nr->{$key}."\t";
