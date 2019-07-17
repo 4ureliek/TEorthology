@@ -26,7 +26,7 @@ use Bio::DB::Fasta;
 use Bio::SearchIO; 
 use Bio::SeqIO;
 
-my $version = "3.8";
+my $version = "3.9";
 
 my $changelog = "
 #	- v1.0 = May 2014
@@ -86,6 +86,8 @@ my $changelog = "
 #       fix \"Use of uninitialized value \$f_name in lc at TE_Orthology_P_v3+.pl line 745.\"
 #       fix blast subroutine (was \$ when \$\$ neeeded)
 #       and split on the file name for the blast outputs wouldn't work well if more than one . in the genome name
+#	- v3.9 = 17 Jul 2019
+#       Bug fix by Miguel Branco in the split_RM_files subroutine 
 
 # TO DO
 # Better and faster if -append would detect directly the .out that have been processed or not...
@@ -788,10 +790,10 @@ sub split_RM_files {
 			if ($flist->[0] ne "na") {	
 				FLIST: foreach my $name (@{$flist}) {
 					my $lcname = lc($name);	
-					next RMLINE if (($f_regexp eq "y") && ($lcname !~ /$lcRname/));
-					next RMLINE if (($f_regexp eq "n") && ($lcname ne $lcRname));
 					last FLIST if (($f_regexp eq "y") && ($lcname =~ /$lcRname/));
 					last FLIST if (($f_regexp eq "n") && ($lcname eq $lcRname));
+					#Bug Fix 2019 07 by Miguel Branco
+					next RMLINE if ($name eq $flist->[$#{$flist}]); #if it went through the whole list without finding a hit, then skip line
 				}
 			}		
 												
